@@ -35,6 +35,18 @@ def parse_odds(s):
         return float(m.group(1))
     return None
 
+def parse_birthday(s):
+    m = re.match('(\\d+)/(\\d+)/(\\d+)生', s)
+    if m:
+        return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return None
+
+def parse_seirei(s):
+    m = re.match('([牡|牝|騙])(\\d)', s)
+    if m:
+        return (m.group(1), int(m.group(2)))
+    return (None, None)
+
 
 class RakutenKeibaSpider(scrapy.Spider):
     name = 'rakuten_keiba'
@@ -43,6 +55,9 @@ class RakutenKeibaSpider(scrapy.Spider):
 
     def parse(self, response):  # Day
         for url in response.css('a::attr("href")').re('https://keiba.rakuten.co.jp/race_performance/list/RACEID/[0-9]{8}0000000000'):
+            yyyymmdd = re.match('https://keiba.rakuten.co.jp/race_performance/list/RACEID/([0-9]{8})0000000000', url).group(1)
+            if yyyymmdd <= '19000101':
+                continue
             yield scrapy.Request(
                 response.urljoin(url),
                 callback=self.parse,
@@ -131,12 +146,14 @@ class RakutenKeibaSpider(scrapy.Spider):
                         odds = (''.join(td.css('.append .rate .hot::text, .append .rate .dark::text').extract())).strip()
                         slot['オッズ'] = parse_odds(odds)
 
-                    slot['誕生日'] = ''.join(td.css('.append::text').extract()).split('\n')[4].strip()
+                    slot['誕生日'] = parse_birthday(''.join(td.css('.append::text').extract()).split('\n')[4].strip())
                     slot['馬主名'] = ''.join(td.css('.append::text').extract()).split('\n')[5].strip()
                     slot['生産牧場'] = ''.join(td.css('.append::text').extract()).split('\n')[6].strip()
 
                 if class_ == 'profile':
                     slot['性齢'] = ''.join(td.css('.profile::text').extract()).split('\n')[1].strip()
+                    slot['性別'] = parse_seirei(slot['性齢'])[0]
+                    slot['年齢'] = parse_seirei(slot['性齢'])[1]
                     slot['毛色'] = ''.join(td.css('.profile::text').extract()).split('\n')[2].strip()
                     slot['負担重量'] = float(''.join(td.css('.profile::text').extract()).split('\n')[3].strip())
                     slot['騎手名'] = ''.join(td.css('.profile::text').extract()).split('\n')[6].strip()
